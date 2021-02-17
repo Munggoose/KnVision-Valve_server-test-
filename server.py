@@ -10,7 +10,8 @@ import os
 import cv2
 import json
 import time
-from preprocessing import *
+# from preprocessing import *
+from GANomaly_psc.lib.Houghcopy import get_preprocess_img
 from os import walk
 import torchvision.transforms as transforms
 from GANomaly_psc.lib.model import Ganomaly
@@ -56,7 +57,6 @@ class server:
             self.opt.nz = 400
             self.opt.extralayers = 0
             
-
             self.model = Ganomaly(self.opt)
             self.model.load(parameter.weight_path)
             print('[server]default model ' + 'ganomaly' +' is ready')
@@ -142,7 +142,7 @@ while True:
     err_scores = []
     str_err_scores = ""
     img_path = S.recv_msg()
-    print('check')
+    print('Connect')
     print('[server]img path(or quit) is : ' + img_path)
     if not img_path:
         # print('No path')
@@ -153,10 +153,20 @@ while True:
         break
     
     start = time.process_time()
+
     target_img = get_preprocess_img(img_path)
+    if not target_img:
+        str_err_scores += f"Can't find circle "
+        diagnosis_result = 'Abnormal'
+        str_err_scores += f"  result: {diagnosis_result}"
+        S.send_msg(str_err_scores)
+        end = time.process_time()
+        print('[server]processing time : ', (end - start))
+        continue
+    
     cv2.imwrite('./sample.bmp',target_img)
     
-    thresholds = 0.021
+    thresholds = 0.05
     diagnosis_result = 'Normal'
 
     err, _ = S.test_img(target_img)
