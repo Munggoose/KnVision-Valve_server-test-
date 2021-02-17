@@ -18,7 +18,7 @@ port : 서버가 사용할 port번호
 
 
 '''
-json_path = '.\\json\\serv_json.json'
+json_path = '.\\json\\serv_json2.json'
 weight_path = '.\\weights'
 addr = '127.0.0.1'
 port = 3070

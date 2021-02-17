@@ -1,7 +1,7 @@
 import socket
 # from ganomaly.lib.model import *  #model
-from ganomaly.models.ganomaly import Ganomaly
-from ganomaly.options import Options
+# from ganomaly.models.ganomaly import Ganomaly
+# from ganomaly.options import Options
 
 import parameter
 import torchvision.utils as vutils
@@ -13,6 +13,13 @@ import time
 from preprocessing import *
 from os import walk
 import torchvision.transforms as transforms
+from GANomaly_psc.lib.model import Ganomaly
+from  GANomaly_psc.options import Options
+
+
+host = parameter.addr
+port = parameter.port
+
 
 class server:
     def __init__(self, host, port):
@@ -24,13 +31,7 @@ class server:
         self.dataloader = None
         self.sock = None
         self.modstr = None
-        # self.transforms = transforms.Compose(
-        #     [
-        #         transforms.Resize(256),
-        #         transforms.ToTensor(),
-        #         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-        #     ]
-        # )
+
 
     def establish(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -40,7 +41,15 @@ class server:
         self.conn_sock, _ = self.sock.accept()
 
     def load_model(self, json_data):
+        """[summary] 
+        model initialize
+        setting model pth 
+
+        Args:
+            json_data ([type]): [description] model setting parameter opt.parameter
+        """
         if json_data == None:
+            print('check')
             self.modstr = 'ganomaly'
             self.opt = Options().parse()
             self.opt.isize = 256
@@ -51,7 +60,6 @@ class server:
             self.model = Ganomaly(self.opt)
             self.model.load(parameter.weight_path)
             print('[server]default model ' + 'ganomaly' +' is ready')
-
         else:
             mod = json_data['mod']
             if mod == 'ganomaly':
@@ -81,13 +89,21 @@ class server:
 
     
     def test_img(self, input_img):
-        if self.modstr == 'ganomaly':
-            norm = transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))   
-            img = cv2.resize(input_img, dsize=(256, 256))
-            img_t = transforms.ToTensor()(img)
-            img_t = norm(img_t)
+        """[summary] return Ganomaly abnormal score
 
-            # img_t = self.transforms(input_img)
+        Args:
+            input_img ([type]):preprocessed image data
+
+        Returns:
+            [float]: abnormal score, 
+            [numpy]: fake_image
+        """
+        if self.modstr == 'ganomaly':
+            # norm = transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))   
+            img = cv2.resize(input_img, dsize=(128, 128)) #opt.isize
+            img_t = transforms.CenterCrop(128)(img_t)
+            img_t = transforms.ToTensor()(img)
+            # img_t = norm(img_t)
 
             err, fake, _ = self.model.test_one(img_t)
             np_fake = fake.cpu().numpy()
@@ -101,9 +117,7 @@ class server:
         self.sock.close()
 
 
-host = parameter.addr
-port = parameter.port
-
+##main
 try:
     with open(parameter.json_path, 'r') as f:
         if f is None:
@@ -115,6 +129,7 @@ except:
     mod = input('[server]select model <now available - ganomaly> :')
     
 
+## server and model init
 S = server(host, port)
 S.load_model(json_data)
 S.establish()
@@ -138,21 +153,15 @@ while True:
         break
     
     start = time.process_time()
-    # img = cv2.imread(img_path)
-    # target_img = seperate_image(img)  ##preprocessing
     target_img = get_preprocess_img(img_path)
     cv2.imwrite('./sample.bmp',target_img)
     
     thresholds = 0.021
     diagnosis_result = 'Normal'
 
-    # err, _ = S.test_img(img)
-    # if err > thresholds:
-    #     diagnosis_result = 'Abnormal'
-    # str_err_scores += "{:.2f} ".format(err)
-
-    # for index, sep_img in enumerate(sep_imgs):
     err, _ = S.test_img(target_img)
+
+
     if err > thresholds:
         diagnosis_result = 'Abnormal'
     str_err_scores += "{:.2f} ".format(err)
