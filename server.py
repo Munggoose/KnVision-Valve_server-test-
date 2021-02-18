@@ -101,12 +101,13 @@ class server:
         if self.modstr == 'ganomaly':
             # norm = transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))   
             img = cv2.resize(input_img, dsize=(128, 128)) #opt.isize
-            img_t = transforms.CenterCrop(128)(img_t)
+            #img_t = transforms.CenterCrop(128)(img_t)
             img_t = transforms.ToTensor()(img)
             # img_t = norm(img_t)
 
-            err, fake, _ = self.model.test_one(img_t)
-            np_fake = fake.cpu().numpy()
+            err, fake = self.model.test_one(img_t)
+            # np_fake = fake.cpu().numpy()
+            np_fake = fake
             return err.item(), np_fake
         else:
             print('[server]model isn\'t ready')
@@ -154,13 +155,16 @@ while True:
     
     start = time.process_time()
 
-    target_img = get_preprocess_img(img_path)
-    if not target_img:
+    target_img, _check = get_preprocess_img(img_path)
+    # print('data', np.shape(target_img))
+    # print(len(target_img))
+    if not _check:
         str_err_scores += f"Can't find circle "
         diagnosis_result = 'Abnormal'
         str_err_scores += f"  result: {diagnosis_result}"
         S.send_msg(str_err_scores)
         end = time.process_time()
+        print('Not found Circle ')
         print('[server]processing time : ', (end - start))
         continue
     
@@ -178,6 +182,7 @@ while True:
     str_err_scores += f"  result: {diagnosis_result}"
     S.send_msg(str_err_scores)
     end = time.process_time()
+    print('err_scores: ', err ,' rsult: ',diagnosis_result)
     print('[server]processing time : ', (end - start))
 
 S.disconnet()

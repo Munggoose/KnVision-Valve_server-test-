@@ -2,7 +2,7 @@
 set root=C:\anaconda3
 call %root%\Scripts\activate.bat %root%
 
-call activate dl
+call activate mun
 
 :START
 

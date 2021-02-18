@@ -70,7 +70,7 @@ def get_preprocess_img(_path):
     detected_circles = cv2.HoughCircles(gray_blurred,  
                     cv2.HOUGH_GRADIENT, 1.5, 1270, param1 = 95, 
                 param2 = 30, minRadius = 98, maxRadius = 102) 
-    
+
     # Draw circles that are detected. 
     if detected_circles is not None: 
         
@@ -103,11 +103,11 @@ def get_preprocess_img(_path):
             #이미지가 저장될 때의 크기
             print('디버깅용',np.shape(img))
             img = cv2.resize(img, dsize=(sav_iSize, sav_iSize), interpolation=cv2.INTER_AREA)
-            return img
+            return img,True
         
     else:
-        print('pass')
-        return None
+        print('전처리과정에서 원을 찾지 못함')
+        return 10,False
         # fail_list.append(k)
         # print(f'{k} failed!')
             
