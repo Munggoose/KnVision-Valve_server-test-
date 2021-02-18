@@ -162,25 +162,27 @@ while True:
         str_err_scores += f"Can't find circle "
         diagnosis_result = 'Abnormal'
         str_err_scores += f"  result: {diagnosis_result}"
-        S.send_msg(str_err_scores)
+        # S.send_msg(str_err_scores)
+        S.send_msg(diagnosis_result)
         end = time.process_time()
-        print('Not found Circle ')
+        #print('Not found Circle ')
+        print('Abnormal')
         print('[server]processing time : ', (end - start))
         continue
     
     cv2.imwrite('./sample.bmp',target_img)
     
-    thresholds = 0.05
+    thresholds = 4 #0.05
     diagnosis_result = 'Normal'
 
     err, _ = S.test_img(target_img)
-
 
     if err > thresholds:
         diagnosis_result = 'Abnormal'
     str_err_scores += "{:.2f} ".format(err)
     str_err_scores += f"  result: {diagnosis_result}"
-    S.send_msg(str_err_scores)
+    # S.send_msg(str_err_scores)
+    S.send_msg(diagnosis_result)
     end = time.process_time()
     print('err_scores: ', err ,' rsult: ',diagnosis_result)
     print('[server]processing time : ', (end - start))
