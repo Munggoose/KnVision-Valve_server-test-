@@ -11,11 +11,15 @@ import cv2
 import json
 import time
 # from preprocessing import *
-from GANomaly_psc.lib.Houghcopy import get_preprocess_img
+
 from os import walk
 import torchvision.transforms as transforms
+
+
+from GANomaly_psc.lib.Houghcopy import get_preprocess_img
 from GANomaly_psc.lib.model import Ganomaly
 from  GANomaly_psc.options import Options
+from GANomaly_psc.lib.heatmap import DrawResult,calc_diff
 
 
 host = parameter.addr
@@ -118,73 +122,79 @@ class server:
         self.sock.close()
 
 
-##main
-try:
+if __name__ == '__main__':
+    try:
     with open(parameter.json_path, 'r') as f:
         if f is None:
             print('[server]cannot find json file in ' + parameter.json_path)
             json_data = None
         json_data = json.load(f)
-except:
-    print('[server]cannot find json file in ' + parameter.json_path)
-    mod = input('[server]select model <now available - ganomaly> :')
+    except:
+        print('[server]cannot find json file in ' + parameter.json_path)
+        mod = input('[server]select model <now available - ganomaly> :')
     
 
-## server and model init
-S = server(host, port)
-S.load_model(json_data)
-S.establish()
+    ## server and model init
+    S = server(host, port)
+    S.load_model(json_data)
+    S.establish()
 
-S.send_msg('server is ready')   #send confirm msg
+    S.send_msg('server is ready')   #send confirm msg
 
-cnt = 0
+    cnt = 0
 
-while True:
-    err_scores = []
-    str_err_scores = ""
-    img_path = S.recv_msg()
-    print('Connect')
-    print('[server]img path(or quit) is : ' + img_path)
-    if not img_path:
-        # print('No path')
-        assert('NO Path')
+    while True:
+        err_scores = []
+        str_err_scores = ""
+        img_path = S.recv_msg()
+        print('Connect')
+        print('[server]img path(or quit) is : ' + img_path)
+        if not img_path:
+            # print('No path')
+            assert('NO Path')
 
-    if img_path == 'finish':
-        S.disconnet()
-        break
-    
-    start = time.process_time()
+        if img_path == 'finish':
+            S.disconnet()
+            break
+        
+        start = time.process_time()
 
-    target_img, _check = get_preprocess_img(img_path)
-    # print('data', np.shape(target_img))
-    # print(len(target_img))
-    if not _check:
-        str_err_scores += f"Can't find circle "
-        diagnosis_result = 'Abnormal'
+        target_img, _check = get_preprocess_img(img_path)
+        # print('data', np.shape(target_img))
+        # print(len(target_img))
+        if not _check:
+            str_err_scores += f"Can't find circle "
+            diagnosis_result = 'Abnormal'
+            str_err_scores += f"  result: {diagnosis_result}"
+            # S.send_msg(str_err_scores)
+            S.send_msg(diagnosis_result)
+            end = time.process_time()
+            #print('Not found Circle ')
+            print('Abnormal')
+            print('[server]processing time : ', (end - start))
+            continue
+        
+        
+        
+        thresholds = 4 #0.05
+        diagnosis_result = 'Normal'
+
+        err, fake_img = S.test_img(target_img)
+        diff_img = calc_diff(target_img, fake_img, 1, thres=0.67)
+        result_img = DrawResult(diff_img, img_path)
+        cv2,imwrite('./sample.bmp',result_img)
+        # cv2.imwrite('./sample.bmp',target_img)
+        
+        
+        if err > thresholds:
+            diagnosis_result = 'Abnormal'
+        str_err_scores += "{:.2f} ".format(err)
         str_err_scores += f"  result: {diagnosis_result}"
         # S.send_msg(str_err_scores)
         S.send_msg(diagnosis_result)
         end = time.process_time()
-        #print('Not found Circle ')
-        print('Abnormal')
+        print('err_scores: ', err ,' rsult: ',diagnosis_result)
         print('[server]processing time : ', (end - start))
-        continue
-    
-    cv2.imwrite('./sample.bmp',target_img)
-    
-    thresholds = 4 #0.05
-    diagnosis_result = 'Normal'
 
-    err, _ = S.test_img(target_img)
-
-    if err > thresholds:
-        diagnosis_result = 'Abnormal'
-    str_err_scores += "{:.2f} ".format(err)
-    str_err_scores += f"  result: {diagnosis_result}"
-    # S.send_msg(str_err_scores)
-    S.send_msg(diagnosis_result)
-    end = time.process_time()
-    print('err_scores: ', err ,' rsult: ',diagnosis_result)
-    print('[server]processing time : ', (end - start))
-
-S.disconnet()
+    S.disconnet()
+        

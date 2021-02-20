@@ -1,37 +1,34 @@
 import cv2
 import numpy as np
 import argparse
-import matplotlib.pyplot as plt
-from GANomaly_psc.lib.Hough import img_Contrast
-
-'''
-
-Create blended heat map with JET colormap 
-'''
+from lib.Hough import img_Contrast
 
 # def create_heatmap(im_map, im_cloud, kernel_size=(5,5),colormap=cv2.COLORMAP_JET,a1=0.5,a2=0.5):
 def create_heatmap(im_map, im_cloud, colormap=cv2.COLORMAP_HOT, a1=0.5, a2=0.5):
-    '''
-    img is numpy array
-    kernel_size must be odd ie. (5,5)
-    '''
-
-    # Apply colormap
     im_cloud_clr = cv2.applyColorMap(im_cloud, colormap)
-    # im_map = im_map + im_cloud
     im_map = im_map + im_cloud_clr
+    
     return im_map
+
+
+def calc_diff(real_img, generated_img, batchsize, thres=1.0): # 0.7 for multi batch 0.67 for 0216
+    """[summary]
+
+    Args:
+        real_img ([type]): [description]        shape = (3, 128, 128)
+        generated_img ([type]): [description]   shape = (3, 128, 128)
+        batchsize ([type]): [description]
+        thres (float, optional): [description]  차영상의 한 픽셀의 차이가 thres보다 작을 때 0으로 만듦.
+
+    Returns:
+        [type]: [description]
+    """
     
-    
-def calc_diff(real_img, generated_img, batchsize, thres=0.67): # 0.7 for multi batch 0.67
-# def calc_diff(real_img, generated_img, batchsize, thres=10):
-    # print('real',real_img.shape)
-    # print('fake',generated_img.shape)
-    # exit()
     diff_img = real_img - generated_img
 
-    ch3_diff_img =  diff_img
+    ch3_diff_img = diff_img
     
+    # np.sum을 하여 R,G,B의 종합적인 차이를 구함.
     if batchsize == 1:
         diff_img = np.sum(diff_img, axis=0)
     else:
@@ -48,7 +45,6 @@ def calc_diff(real_img, generated_img, batchsize, thres=0.67): # 0.7 for multi b
     diff_img = cv2.normalize(diff_img, diff_img, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
     
     return diff_img, ch3_diff_img
-
 
 
 def Draw_Anomaly_image(real_img, diff_img, ch3_diff_img, batchsize):
@@ -83,7 +79,7 @@ def Draw_Anomaly_image(real_img, diff_img, ch3_diff_img, batchsize):
     return anomaly_img
 
 
-def DrawResult(diff_img, rawPATH): #raw_img, diff_img, sav_fName, rawPATH
+def DrawResult(raw_img, diff_img, sav_fName, rawPATH):
         """[summary]: find_Center()를 활용해 raw Image의 중심점 찾고, 얻은 좌표 기반으로 diff_img 덧붙임.
         
         Related Functions:
@@ -93,6 +89,10 @@ def DrawResult(diff_img, rawPATH): #raw_img, diff_img, sav_fName, rawPATH
             raw_img ([type]): [description] shape=(720, 1280, 3)
             diff_img ([type]): [description] maybe shape=(3, w, h)
         """
+        if sav_fName[0] == '0':
+            rawPATH += 'normal\\' + sav_fName
+        else:
+            rawPATH += 'abnormal\\' + sav_fName
 
         raw_img = cv2.imread(rawPATH, cv2.IMREAD_COLOR)
         
@@ -127,7 +127,6 @@ def DrawResult(diff_img, rawPATH): #raw_img, diff_img, sav_fName, rawPATH
                 raw_diff[a-r:a+r, b-r:b+r] = diff_img
                 raw_diff = np.array([raw_diff, raw_diff, raw_diff])
                 
-
                 raw_img = cv2.normalize(raw_img, raw_img, 0, 255, cv2.NORM_MINMAX).get().astype(np.uint8)
                 raw_diff = cv2.normalize(raw_diff, raw_diff, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
                 

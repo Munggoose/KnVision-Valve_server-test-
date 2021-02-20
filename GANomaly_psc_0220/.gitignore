@@ -1,6 +1,7 @@
 ##
 #DIRECTORIES
 data/*
+RAW/*
 !data/sample
 output/
 *.pth
@@ -9,7 +10,7 @@ runs
 projector/
 __pycache__/
 *.pylintrc
-*.bmp
+
 .vscode/
 .idea/
 .ganomaly/

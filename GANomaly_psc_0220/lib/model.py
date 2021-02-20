@@ -15,19 +15,21 @@ import torch.nn as nn
 import torch.utils.data
 import torchvision.utils as vutils
 
-from GANomaly_psc.lib.networks import NetG, NetD, weights_init
-from GANomaly_psc.lib.visualizer import Visualizer
-from GANomaly_psc.lib.loss import l2_loss, l1_loss
-from GANomaly_psc.lib.evaluate import evaluate
+from lib.networks import NetG, NetD, weights_init
+from lib.visualizer import Visualizer
+from lib.loss import l2_loss, l1_loss
+from lib.evaluate import evaluate
 
 import cv2
 import time
 import copy
-from GANomaly_psc.lib.Hough import HoughCircleDetection
 
 
 import matplotlib.pyplot as plt
-from GANomaly_psc.lib.heatMap import create_heatmap, calc_diff
+import lib.heatMap as heatMap
+
+
+
 
 class BaseModel():
     """ Base Model for ganomaly
@@ -227,19 +229,12 @@ class BaseModel():
             epoch_iter = 0
             self.batchNum = 0
             ab_RGB = []
-            h = HoughCircleDetection('.bmp', self.opt.isize)
+            # h = HoughCircleDetection('.bmp', self.opt.isize)
             for i, data in enumerate(self.dataloader['test'], 0):
                 #startTime = time.time()
                 self.total_steps += self.opt.batchsize
                 epoch_iter += self.opt.batchsize
                 time_i = time.time()
-                if self.opt.dataset=='raw':
-                    data[0] = h.find_Center(data[0])
-                # print(f'len: {np.average(data[0])}')
-                # print(f'shape: {np.shape(data[0].numpy())}')
-                # print(f'min: {np.min(data[0].numpy())}')
-                # print(f'max: {np.max(data[0].numpy())}')
-                # print(f'avg: {np.average(data[0].numpy())}')
                 self.set_input(data)
                 self.input
                 self.fake, latent_i, latent_o = self.netg(self.input)
@@ -249,14 +244,11 @@ class BaseModel():
                 
                 #print(f'processing time: {time.time() - startTime}')########################################################################################
                 self.an_scores[i*self.opt.batchsize : i*self.opt.batchsize+error.size(0)] = error.reshape(error.size(0))
-
                 self.gt_labels[i*self.opt.batchsize : i*self.opt.batchsize+error.size(0)] = self.gt.reshape(error.size(0))
                 self.latent_i [i*self.opt.batchsize : i*self.opt.batchsize+error.size(0), :] = latent_i.reshape(error.size(0), self.opt.nz)
                 self.latent_o [i*self.opt.batchsize : i*self.opt.batchsize+error.size(0), :] = latent_o.reshape(error.size(0), self.opt.nz)
 
                 self.times.append(time_o - time_i)
-                
-                # ab_thres = 0.6
 
                 # Save test images.
                 if self.opt.save_test_images:
@@ -265,17 +257,10 @@ class BaseModel():
                         os.makedirs(dst)
                     real, fake, _ = self.get_current_images()
                     
-#######################################################
-                    
                     real_img = real.cpu().data.numpy().squeeze()
                     generated_img = fake.cpu().data.numpy().squeeze()
                     
-                    diff_img, ch3_diff_img = calc_diff(real_img, generated_img, self.opt.batchsize) #57 #50
-                    # diff_img, ch3_diff_img = calc_diff(real_img, generated_img, thres=0.35) #57 #50
-                    
-                    
-                    # for bts in range(self.opt.batchsize):
-                    #     ab_RGB.append(np.sum(diff_img[bts]) * 100 / (self.opt.isize*self.opt.isize*255))
+                    diff_img, ch3_diff_img = heatMap.calc_diff(real_img, generated_img, self.opt.batchsize)
 
                     if self.opt.batchsize == 1:
                         ab_RGB.append(np.sum(diff_img) * 100 / (self.opt.isize*self.opt.isize*255))
@@ -284,65 +269,27 @@ class BaseModel():
                         for bts in range(self.opt.batchsize):
                             ab_RGB.append(np.sum(diff_img[bts]) * 100 / (self.opt.isize*self.opt.isize*255))
                         anomaly_img = np.zeros(shape=(self.opt.batchsize, self.opt.isize, self.opt.isize, self.opt.nc))
-                    
-                    anomaly_img = real_img - ch3_diff_img 
-                    anomaly_img = cv2.normalize(anomaly_img, anomaly_img, 0, 255, cv2.NORM_MINMAX)
-
-                    real_img = cv2.normalize(real_img, real_img, 0, 255, cv2.NORM_MINMAX)
-                    generated_img = cv2.normalize(generated_img, generated_img, 0, 255, cv2.NORM_MINMAX)
-                    
-                    diff_img = cv2.normalize(diff_img, diff_img, -2, 2, cv2.NORM_MINMAX).astype(np.uint8)
-                    diff_img = np.exp(diff_img/255)
-
-                    diff_img = cv2.normalize(diff_img, diff_img, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-
-                    diff_img_expanded = [diff_img, diff_img, diff_img]
-                    
-                    if self.opt.batchsize == 1:
-                        anomaly_img = np.transpose(create_heatmap(np.transpose(anomaly_img, (1,2,0)), np.transpose(diff_img_expanded, (1,2,0)), a1=.2, a2=.8), (2,0,1))
-                    else:
-                        diff_img_expanded = np.transpose(diff_img_expanded, (1,0,3,2))
-                        for bts in range(self.opt.batchsize):
-                            anomaly_img[bts] = np.transpose(create_heatmap(np.transpose(anomaly_img[bts], (1,2,0)), np.transpose(diff_img_expanded[bts], (1,2,0)), a1=.2, a2=.8), (2,1,0))
-                    
+                        
+                    anomaly_img = heatMap.Draw_Anomaly_image(real_img, diff_img, ch3_diff_img, self.opt.batchsize)
                     
                     allFiles, _ = map(list, zip(*self.dataloader['test'].dataset.samples))
-                    # print(allFiles[i])
-                    # print(allFiles[i])
                     sav_fName = allFiles[i][allFiles[i].rfind('\\')+1:]
-                    print(sav_fName)
+                    print(sav_fName) # sav_fName: Paired file name between RAW Images and Preprocessed Images
                     
-                    rawPATH = 'C:\\Users\\Seungchan_HCI\\Desktop\\Nuts\\Nuts_preprocessed\\2\\0208\\purified\\'
-                    if sav_fName[0] == 0:
-                        rawPATH += 'normal\\' +sav_fName
-                    else:
-                        rawPATH += 'abnormal\\' +sav_fName
+                    rawPATH = 'RAW\\' # 1280x720 원본 이미지 경로.
+                    raw_img = heatMap.DrawResult(rawPATH, diff_img, sav_fName, rawPATH)
+                    if raw_img is None: # 총 3523 개의 RAW Image 중 8개의 사진에서 원 검출을 실패했을 경우.
+                        continue
                     
-                    # print(rawPATH)
-                    # raw_img = cv2.imread(rawPATH, cv2.IMREAD_COLOR)
-                    # raw_img = h.DrawResult(raw_img, diff_img, ch3_diff_img)
-                    # cv2.imshow('hi', raw_img)
-                    # cv2.waitKey(0)
-                    
-                    ab_thres = 0.05
-                    newImg = self.make_result_panel(None, real_img, generated_img, anomaly_img, ab_RGB, ab_thres)
+                    ab_thres = 0.022    # 이상치 검출을 위한 역치
+                    real_img = cv2.normalize(real_img, real_img, 0, 255, cv2.NORM_MINMAX)
+                    generated_img = cv2.normalize(generated_img, generated_img, 0, 255, cv2.NORM_MINMAX)
+                    newImg = self.make_result_panel(raw_img, real_img, generated_img, anomaly_img, ab_RGB, ab_thres)
                     
                     if (self.epoch4Test == 1 or self.epoch4Test % 20 == 0):
                         cv2.imwrite(f'output\\ganomaly\\casting\\test\\images\\' + sav_fName, newImg)
-                        # cv2.imwrite(f'output\\ganomaly\\casting\\test\\images\\diff_{i+1}_.png', newImg)
-                        
-                    
-                    
-                    
-                    
-                    # for i, (inputs, labels) in enumerate(self.dataloader['test']):
-                    #     inputs = inputs.to(self.device)
-                    #     labels = labels.to(self.device)
-                    #     for j in range(inputs.size()[0]):
-                    #         print(allFiles[i + j])
                     
                     #print(f'fin Time: {time.time() - startTime}\n') ########################################################################################
-#######################################################
 
             # Measure inference time.
             self.times = np.array(self.times)
@@ -350,8 +297,6 @@ class BaseModel():
 
             # Scale error vector between [0, 1]
             self.an_scores = (self.an_scores - torch.min(self.an_scores)) / (torch.max(self.an_scores) - torch.min(self.an_scores))
-            # auc, eer = roc(self.gt_labels, self.an_scores)
-            #auc = evaluate(self.gt_labels, self.an_scores, self.epoch4Test, metric=self.opt.metric)
             auc = evaluate(self.gt_labels, self.an_scores, ab_RGB, self.epoch4Test, ab_thres, metric=self.opt.metric)
             performance = OrderedDict([('Avg Run Time (ms/batch)', self.times), (self.opt.metric, auc)])
 
@@ -359,14 +304,14 @@ class BaseModel():
                 counter_ratio = float(epoch_iter) / len(self.dataloader['test'].dataset)
                 self.visualizer.plot_performance(self.epoch, counter_ratio, performance)
             return performance
-    
-
+        
     def make_result_panel(self, raw_img, real_img, generated_img, anomaly_img, ab_RGB, ab_thres=0.125):
         houseParty = []
         tmp0 = []
         tmp1 = []
         tmp2 = []
         if(self.opt.batchsize == 1):
+            
             tmp0.append(np.transpose(real_img, (1,2,0)))
             tmp1.append(np.transpose(generated_img, (1,2,0)))
             tmp2.append(np.transpose(anomaly_img, (1,2,0)))
@@ -387,9 +332,6 @@ class BaseModel():
         addImg = np.vstack(houseParty)
 
         scorePanel = np.zeros(shape=(self.opt.batchsize, int(self.opt.isize/2), self.opt.isize, self.opt.nc))
-        # ab_thres = 0.125
-        # ab_thres = 0.030
-        # ab_thres = 0.005
         for bts in range(self.opt.batchsize):
             tmp = np.transpose(scorePanel[bts], (2,0,1))
             if(ab_RGB[bts + self.batchNum*self.opt.batchsize] >= ab_thres): #abnormal
@@ -460,47 +402,16 @@ class BaseModel():
 
         scsc = tuple(hList)
         nnewImg = np.hstack(scsc)
-        newImg = np.vstack((addImg, nnewImg))
+        newImg = np.vstack((addImg, nnewImg)) #(448,128,3)
+        # pad = np.zeros(shape=(720, 128, 3))
+        pad = np.zeros(shape=(3, 128, 720))
+        pad[:,:128,:448] = np.transpose(newImg, (2,1,0))
+        pad = np.transpose(pad, (2,1,0))
+        
+        newImg = np.hstack((raw_img, pad))
         return newImg
 
-    def load(self,weight_path):
-        """load and set model weight 
-        Args:
-            weight_path ([str]): path of .pth file
-        Raises:
-            IOError: [description]
-        """
-        with torch.no_grad():
-            path = weight_path + '\\netG.pth'
-            #print(path)
-            pretrained_dict = torch.load(path)['state_dict']
-            try:
-                self.netg.load_state_dict(pretrained_dict)
-            except IOError:
-                raise IOError("[server]netG weights not found")
-            print('[server]   Loaded weights.')
-            self.opt.phase = 'test'
-        pass
-
-    def test_one(self,_img):
-        ab_RGB = None
-        self.fake, latent_i, latent_o = self.netg(self.input)
-
-        # error = torch.mean(torch.pow((latent_i-latent_o), 2), dim=1)
-            
-        # real_img = _img.cpu().data.numpy().squeeze()
-        # generated_img = self.fake.cpu().data.numpy().squeeze()
-        real, fake,_ = self.get_current_images()
-        
-        real_img = real.cpu().data.numpy().squeeze()
-        generated_img = fake.cpu().data.numpy().squeeze()
-        
-        diff_img, ch3_diff_img = calc_diff(real_img, generated_img, self.opt.batchsize) #57 #50
-        ab_RGB = np.sum(diff_img) * 100 / (self.opt.isize*self.opt.isize*255)
-
-        return ab_RGB, real_img ,generated_img, diff_img
-
-
+##
 class Ganomaly(BaseModel):
     """GANomaly Class
     """
